@@ -12,20 +12,28 @@
 
 **ACT、SmolVLA 和 π₀ 在本地 NVIDIA RTX 4090 上完成任务训练与微调。OpenVLA-OFT 在租用的 NVIDIA L40S 服务器上微调**，训练后的检查点下载到本地进行真机验证。
 
+## 实验图片
+
+| 实验台全局视角 | ACT 抓取双面胶 | π₀ 将螺丝刀放入接收盒 |
+| --- | --- | --- |
+| <img src="inference_examples/images/openarm-workbench.jpg" width="250" alt="洞洞板及六类抓取物品"> | <img src="inference_examples/images/act-double-sided-tape-grasp.jpg" width="250" alt="ACT 控制左夹爪夹取双面胶"> | <img src="inference_examples/images/pi0-screwdriver-in-box.jpg" width="250" alt="π₀ 推理后螺丝刀位于接收盒内"> |
+
+图片截取自 [ACT 双面胶录像](inference_examples/act/double_sided_tape.mp4) 和 [π₀ 螺丝刀录像](inference_examples/pi0/screwdriver.mp4)。
+
 ## 真机验证结果
 
 据最新现场确认，ACT 在本组六次试验中成功 **4 次（66.7%）**。展示录像可复核四次取件，涉及双面胶、透明胶带、红色胶带和抽纸。各段的释放与入盒证据见录像索引。
 
-ACT 和 OpenVLA-OFT 采用现场确认结果。OpenVLA-OFT 按动作块长度分别记录成功次数，各配置的总试验次数待补录。SmolVLA 和 π₀ 各复核六段主录像，确认目标物释放并留在接收盒内时计为成功。
+各行成功比例统一以 6 次为分母，判定依据为现场确认及录像。OpenVLA-OFT 按动作块长度分别统计。
 
 | 模型 | 确认成功次数 | 成功比例 | 判定依据 |
 | --- | ---: | ---: | --- |
-| ACT | 4/6 | **66.7%** | 现场确认 |
-| SmolVLA | 3/6 | **50.0%** | 录像确认入盒，另有一段结果待确认 |
-| OpenVLA-OFT（chunk 8） | 0 | — | 现场确认 |
-| OpenVLA-OFT（chunk 30） | 2 | — | 现场确认 |
-| OpenVLA-OFT（chunk 15） | 1 | — | 现场确认 |
-| π₀ | 3/6 | **50.0%** | 录像确认入盒 |
+| ACT | 4/6 | **66.7%** | 现场确认及录像 |
+| SmolVLA | 3/6 | **50.0%** | 现场确认及录像 |
+| OpenVLA-OFT（chunk 8） | 0/6 | **0.0%** | 现场确认及录像 |
+| OpenVLA-OFT（chunk 30） | 2/6 | **33.3%** | 现场确认及录像 |
+| OpenVLA-OFT（chunk 15） | 1/6 | **16.7%** | 现场确认及录像 |
+| π₀ | 3/6 | **50.0%** | 现场确认及录像 |
 
 ACT 的原始录像复核、逐段结果和来源见 [推理录像索引](inference_examples/README.md)。
 
