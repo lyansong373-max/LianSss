@@ -1,0 +1,12 @@
+{
+  "measured_and_verified": false,
+  "base_frame": "openarm_body_link0",
+  "device": "/dev/v4l/by-path/pci-0000:00:14.0-usb-0:10:1.0-video-index0",
+  "image_size": [640, 480],
+  "camera_matrix": null,
+  "distortion": null,
+  "T_base_camera": null,
+  "board_origin_base_m": null,
+  "board_outward_normal_base": null,
+  "workspace_bounds_base_m": null
+}

@@ -1,0 +1,30 @@
+# Never publish model weights or training checkpoints from this repository.
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.gguf
+*.bin
+*.h5
+**/checkpoints/
+**/pretrained_model/
+**/training_state/
+**/models/
+/work/
+/outputs/
+
+# Local state and generated files.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.env.*
+.netrc
+wandb/
+build/
+install/
+log/
+*.log
+.DS_Store

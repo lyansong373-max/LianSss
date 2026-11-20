@@ -1,0 +1,9 @@
+{
+  "measured_and_verified": false,
+  "object_id": "white_tape",
+  "arm": "left",
+  "grasp_plane_offset_m": null,
+  "pregrasp_distance_m": null,
+  "hand_orientation_xyzw": null,
+  "tcp_in_hand_m": null
+}

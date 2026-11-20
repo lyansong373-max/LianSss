@@ -1,0 +1,2 @@
+lerobot-policy-openvla-oft commit: eba1ab4f151d3863a72923f60e7d5ca9da323794
+upstream OpenVLA-OFT reference submodule commit: e4287e94541f459edc4feabc4e181f537cd569a8

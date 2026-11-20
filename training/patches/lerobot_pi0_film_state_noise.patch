@@ -1,0 +1,258 @@
+diff --git a/src/lerobot/policies/pi0/configuration_pi0.py b/src/lerobot/policies/pi0/configuration_pi0.py
+index 24a8f9b0..bd3cbca4 100644
+--- a/src/lerobot/policies/pi0/configuration_pi0.py
++++ b/src/lerobot/policies/pi0/configuration_pi0.py
+@@ -87,6 +87,11 @@ class PI0Config(PreTrainedConfig):
+     # Finetuning settings
+     freeze_vision_encoder: bool = False  # Freeze only the vision encoder
+     train_expert_only: bool = False  # Freeze entire VLM, train only action expert and projections
++    use_film: bool = False  # Condition image tokens on the language instruction
++    film_hidden_dim: int = 256
++    state_dropout_prob: float = 0.0  # Training-only dropout of the projected proprioception token
++    state_noise_rad: float = 0.0  # Training-only Gaussian standard deviation for arm joints
++    state_noise_gripper: float = 0.0  # Training-only gripper noise, in the gripper's raw units
+ 
+     # Optimizer settings: see openpi `AdamW``
+     optimizer_lr: float = 2.5e-5  # see openpi `CosineDecaySchedule: peak_lr`
+@@ -108,6 +113,13 @@ class PI0Config(PreTrainedConfig):
+     def __post_init__(self):
+         super().__post_init__()
+ 
++        if self.film_hidden_dim <= 0:
++            raise ValueError("film_hidden_dim must be positive")
++        if not 0.0 <= self.state_dropout_prob < 1.0:
++            raise ValueError("state_dropout_prob must be in [0, 1)")
++        if self.state_noise_rad < 0 or self.state_noise_gripper < 0:
++            raise ValueError("state noise standard deviations must be nonnegative")
++
+         # Validate configuration
+         if self.n_action_steps > self.chunk_size:
+             raise ValueError(
+diff --git a/src/lerobot/policies/pi0/modeling_pi0.py b/src/lerobot/policies/pi0/modeling_pi0.py
+index 6f33bcbf..9c982d5f 100644
+--- a/src/lerobot/policies/pi0/modeling_pi0.py
++++ b/src/lerobot/policies/pi0/modeling_pi0.py
+@@ -18,7 +18,7 @@ import builtins
+ import logging
+ from collections import deque
+ from pathlib import Path
+-from typing import TYPE_CHECKING, Any, Unpack, cast
++from typing import TYPE_CHECKING, Any, Sequence, Unpack, cast
+ 
+ import torch
+ import torch.nn.functional as F  # noqa: N812
+@@ -46,7 +46,7 @@ else:
+     PaliGemmaForConditionalGenerationWithPiGemma = None
+ 
+ 
+-from lerobot.configs import PreTrainedConfig
++from lerobot.configs import FeatureType, NormalizationMode, PreTrainedConfig
+ from lerobot.utils.constants import (
+     ACTION,
+     OBS_LANGUAGE_ATTENTION_MASK,
+@@ -413,6 +413,56 @@ class PaliGemmaWithExpertModel(
+         return [prefix_output, suffix_output], prefix_past_key_values
+ 
+ 
++class LanguageConditionedFiLM(nn.Module):
++    """Modulate image tokens with a pooled instruction embedding.
++
++    The final layer starts at zero, so enabling FiLM preserves a pretrained
++    policy's predictions until the new conditioning weights are trained.
++    """
++
++    def __init__(self, width: int, hidden_dim: int):
++        super().__init__()
++        self.generator = nn.Sequential(
++            nn.Linear(width, hidden_dim),
++            nn.GELU(),
++            nn.Linear(hidden_dim, 2 * width),
++        )
++        nn.init.zeros_(self.generator[-1].weight)
++        nn.init.zeros_(self.generator[-1].bias)
++
++    def forward(
++        self, language_tokens: Tensor, language_mask: Tensor
++    ) -> tuple[Tensor, Tensor]:
++        mask = language_mask.to(dtype=torch.float32).unsqueeze(-1)
++        pooled = (language_tokens.float() * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1)
++        scale, shift = self.generator(pooled).chunk(2, dim=-1)
++        return scale, shift
++
++
++def drop_projected_state(state_embedding: Tensor, probability: float, training: bool) -> Tensor:
++    """Hide the entire proprioception token for selected training samples."""
++    if not training or probability == 0:
++        return state_embedding
++    keep = torch.rand(state_embedding.shape[0], device=state_embedding.device) >= probability
++    return state_embedding * keep[:, None].to(dtype=state_embedding.dtype)
++
++
++def normalized_state_noise_std(
++    state_std: Tensor, state_names: Sequence[str], arm_std_rad: float, gripper_std: float
++) -> Tensor:
++    """Convert noise in raw joint/gripper units to MEAN_STD-normalized units."""
++    if state_std.ndim != 1 or len(state_names) != state_std.numel():
++        raise ValueError("State noise needs one joint name and one dataset std per state dimension")
++    if not torch.isfinite(state_std).all() or (state_std <= 1e-6).any():
++        raise ValueError("State noise requires finite, positive dataset std for every state dimension")
++    raw_std = torch.tensor(
++        [gripper_std if "gripper" in name.lower() else arm_std_rad for name in state_names],
++        device=state_std.device,
++        dtype=state_std.dtype,
++    )
++    return raw_std / (state_std + 1e-8)
++
++
+ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
+     """Core PI0 PyTorch model."""
+ 
+@@ -443,6 +493,11 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
+         self.action_out_proj = nn.Linear(action_expert_config.width, config.max_action_dim)
+ 
+         self.state_proj = nn.Linear(config.max_state_dim, action_expert_config.width)
++        self.image_film = (
++            LanguageConditionedFiLM(paligemma_config.width, config.film_hidden_dim)
++            if config.use_film
++            else None
++        )
+         self.action_time_mlp_in = nn.Linear(2 * action_expert_config.width, action_expert_config.width)
+         self.action_time_mlp_out = nn.Linear(action_expert_config.width, action_expert_config.width)
+ 
+@@ -518,20 +573,34 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
+         pad_masks = []
+         att_masks = []
+ 
++        def lang_embed_func(lang_tokens):
++            return self.paligemma_with_expert.embed_language_tokens(lang_tokens)
++
++        # FiLM needs the instruction before processing the image tokens. Leave
++        # the original embedding order untouched when FiLM is disabled.
++        lang_emb = None
++        film_params = None
++        if self.image_film is not None:
++            lang_emb = self._apply_checkpoint(lang_embed_func, lang_tokens)
++            film_params = self.image_film(lang_emb, lang_masks)
++
+         # Process images
+         for img_emb, img_mask in zip(self._embed_images(images), img_masks, strict=True):
+             bsize, num_img_embs = img_emb.shape[:2]
+ 
++            if film_params is not None:
++                scale, shift = film_params
++                img_emb = (img_emb.float() * (1 + scale[:, None, :]) + shift[:, None, :]).to(
++                    dtype=img_emb.dtype
++                )
++
+             embs.append(img_emb)
+             pad_masks.append(img_mask[:, None].expand(bsize, num_img_embs))
+             att_masks += [0] * num_img_embs
+ 
+         # Process language tokens
+-        def lang_embed_func(lang_tokens):
+-            lang_emb = self.paligemma_with_expert.embed_language_tokens(lang_tokens)
+-            return lang_emb
+-
+-        lang_emb = self._apply_checkpoint(lang_embed_func, lang_tokens)
++        if lang_emb is None:
++            lang_emb = self._apply_checkpoint(lang_embed_func, lang_tokens)
+         embs.append(lang_emb)
+         pad_masks.append(lang_masks)
+ 
+@@ -560,6 +629,9 @@ class PI0Pytorch(nn.Module):  # see openpi `PI0Pytorch`
+             return self.state_proj(state)
+ 
+         state_emb = self._apply_checkpoint(state_proj_func, state)
++        state_emb = drop_projected_state(
++            state_emb, getattr(self.config, "state_dropout_prob", 0.0), self.training
++        )
+         embs.append(state_emb[:, None, :])
+         bsize = state_emb.shape[0]
+         device = state_emb.device
+@@ -789,6 +861,26 @@ class PI0Policy(PreTrainedPolicy):
+         self.init_rtc_processor()
+         self.model = PI0Pytorch(config, rtc_processor=self.rtc_processor)
+ 
++        self.register_buffer("_state_noise_sigma", None, persistent=False)
++        if config.state_noise_rad > 0 or config.state_noise_gripper > 0:
++            stats = kwargs.get("dataset_stats")
++            if stats is not None:
++                if config.normalization_mapping[FeatureType.STATE] != NormalizationMode.MEAN_STD:
++                    raise ValueError("PI0 state noise currently requires MEAN_STD state normalization")
++                state_stats = stats.get(OBS_STATE, {})
++                if "std" not in state_stats:
++                    raise ValueError("Dataset observation.state std is required for PI0 state noise")
++                state_meta = kwargs.get("dataset_meta")
++                state_names = (
++                    state_meta.features.get(OBS_STATE, {}).get("names") if state_meta is not None else None
++                )
++                if not state_names:
++                    raise ValueError("Dataset observation.state joint names are required for PI0 state noise")
++                state_std = torch.as_tensor(state_stats["std"], dtype=torch.float32)
++                self._state_noise_sigma = normalized_state_noise_std(
++                    state_std, state_names, config.state_noise_rad, config.state_noise_gripper
++                )
++
+         # Enable gradient checkpointing if requested
+         if config.gradient_checkpointing:
+             self.model.gradient_checkpointing_enable()
+@@ -862,9 +954,7 @@ class PI0Policy(PreTrainedPolicy):
+                 original_state_dict = load_file(resolved_file)
+                 print("✓ Loaded state dict from model.safetensors")
+             except Exception as e:
+-                print(f"Could not load state dict from remote files: {e}")
+-                print("Returning model without loading pretrained weights")
+-                return model
++                raise RuntimeError(f"Could not load PI0 pretrained weights from {pretrained_name_or_path}") from e
+ 
+             # First, fix any key differences (see openpi model.py, _fix_pytorch_state_dict_keys)
+             fixed_state_dict = model._fix_pytorch_state_dict_keys(original_state_dict, model.config)
+@@ -884,8 +974,21 @@ class PI0Policy(PreTrainedPolicy):
+             if remap_count > 0:
+                 print(f"Remapped {remap_count} state dict keys")
+ 
+-            # Load the remapped state dict into the model
+-            missing_keys, unexpected_keys = model.load_state_dict(remapped_state_dict, strict=strict)
++            # An older checkpoint has no FiLM weights. Allow only those newly
++            # initialized, identity-initialized parameters to be absent.
++            missing_keys, unexpected_keys = model.load_state_dict(remapped_state_dict, strict=False)
++            if strict:
++                allowed_missing = (
++                    {f"model.image_film.{key}" for key in model.model.image_film.state_dict()}
++                    if model.config.use_film
++                    else set()
++                )
++                disallowed_missing = set(missing_keys) - allowed_missing
++                if disallowed_missing or unexpected_keys:
++                    raise RuntimeError(
++                        "PI0 checkpoint mismatch: "
++                        f"missing={sorted(disallowed_missing)}, unexpected={sorted(unexpected_keys)}"
++                    )
+ 
+             if missing_keys:
+                 print(f"Missing keys when loading state dict: {len(missing_keys)} keys")
+@@ -911,7 +1014,7 @@ class PI0Policy(PreTrainedPolicy):
+                 print("All keys loaded successfully!")
+ 
+         except Exception as e:
+-            print(f"Warning: Could not load state dict: {e}")
++            raise RuntimeError(f"Failed to load PI0 checkpoint from {pretrained_name_or_path}") from e
+ 
+         return model
+ 
+@@ -1129,6 +1232,15 @@ class PI0Policy(PreTrainedPolicy):
+         state = self.prepare_state(batch)
+         actions = self.prepare_action(batch)
+ 
++        if self.training and (self.config.state_noise_rad > 0 or self.config.state_noise_gripper > 0):
++            if self._state_noise_sigma is None:
++                raise ValueError("PI0 training with state noise requires dataset statistics and joint names")
++            state = state.clone()
++            noise = torch.randn_like(state[:, : self._state_noise_sigma.numel()])
++            state[:, : self._state_noise_sigma.numel()] += noise * self._state_noise_sigma.to(
++                device=state.device, dtype=state.dtype
++            )
++
+         noise = self.model.sample_noise(actions.shape, actions.device)
+         time = self.model.sample_time(actions.shape[0], actions.device)
+ 

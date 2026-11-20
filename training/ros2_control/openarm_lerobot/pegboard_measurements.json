@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "purpose": "user_reported_geometry_reference_not_robot_calibration",
+  "source": "user_measurements_2026-11-01",
+  "units": "mm",
+  "width": {
+    "value": 960,
+    "reference_description": "两端黑色最外侧算起",
+    "includes_side_frames": true,
+    "perforated_panel_width": null
+  },
+  "height": {
+    "value": 520,
+    "reference_description": "从中间黑色板的上面到最上面",
+    "reference_confirmed": false
+  },
+  "hole_pattern": {
+    "horizontal_center_pitch": 38,
+    "vertical_center_pitch": 38,
+    "shape": "square",
+    "side_length": 10,
+    "origin_hole": null,
+    "axis_directions": null,
+    "rows": null,
+    "columns": null
+  },
+  "pending": {
+    "global_camera_can_be_repositioned_for_intrinsic_calibration": false,
+    "board_pose_in_robot_base": null,
+    "board_thickness": null,
+    "camera_intrinsics": null,
+    "camera_pose_in_robot_base": null
+  },
+  "task": {
+    "object_id": "tissue",
+    "instruction": "从托架拿起整包／整盒抽纸，放入中间黑色板下方的蓝色盒子",
+    "attempts_requested": 10,
+    "support_or_attachment": "resting_on_shelf",
+    "destination": {
+      "object": "blue_box",
+      "location_description": "中间黑色板下方",
+      "pose_in_robot_base": null,
+      "opening_dimensions": null,
+      "wrist_camera_visibility": true,
+      "visible_in_which_wrist_camera": null
+    },
+    "success_criteria": [
+      "拿取正确的整包／整盒抽纸",
+      "抽纸完整进入指定蓝色盒子并已松开夹爪",
+      "夹爪撤离后抽纸留在盒内"
+    ],
+    "initial_success_verification": "human_confirmation",
+    "grasp_plane_offset": null,
+    "arm": null
+  },
+  "calibration_complete": false,
+  "execution_allowed": false
+}

@@ -1,0 +1,80 @@
+# Display only: reuse the hardware robot_state_publisher and its TF tree.
+# Never launch a joint_state_publisher, joint merger, controller, or MoveIt here.
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Actual OpenArm1
+      Splitter Ratio: 0.5
+  - Class: rviz_common/Views
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Value: true
+      Alpha: 0.4
+      Cell Size: 0.2
+      Plane Cell Count: 20
+      Plane: XY
+      Reference Frame: <Fixed Frame>
+      Color: 160; 160; 164
+    - Class: rviz_default_plugins/RobotModel
+      Name: Actual OpenArm
+      Enabled: true
+      Value: true
+      Alpha: 1
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+        Depth: 1
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+      Visual Enabled: true
+      Collision Enabled: false
+      TF Prefix: ""
+      Update Interval: 0
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+  Enabled: true
+  Global Options:
+    Background Color: 40; 44; 52
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 2.4
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.4
+      Near Clip Distance: 0.01
+      Pitch: 0.33
+      Yaw: 5.5
+      Target Frame: <Fixed Frame>
+      Value: Orbit (rviz)
+    Saved: ~
+Window Geometry:
+  Width: 1200
+  Height: 850
+  Hide Left Dock: false
+  Hide Right Dock: false

@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot_robot_openarm_ros2"
+version = "0.1.0"
+description = "LeRobot robot plugin: bimanual OpenArm v10 controlled through ROS2 (via openarm_lerobot_bridge)"
+requires-python = ">=3.12"
+dependencies = ["lerobot"]
+
+[tool.setuptools]
+packages = ["lerobot_robot_openarm_ros2"]

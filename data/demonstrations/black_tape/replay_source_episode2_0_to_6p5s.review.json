@@ -1,0 +1,14 @@
+{
+  "task": "抓取黑色胶带并放入接收盒",
+  "source_dataset": "/home/yundu1/ros2_ws/openarm_lerobot/datasets/red_tape/demonstrations",
+  "source_episode_index": 2,
+  "source_interval_s": [0, 6.5],
+  "source_samples": 195,
+  "source_original_task_label_is_incorrect": true,
+  "original_dataset_modified": false,
+  "observed_arm": "left",
+  "execution_ready": false,
+  "blocking_issue": "First frame already shows left finger inserted into the black tape inner ring near its support. Curl-to-approach and safe reset approach are not recorded; do not treat this first pose as a free-space curl start.",
+  "physical_motion_sent": false,
+  "next_step": "Record a complete demonstration from a clear curl pose through approach, grasp, lift, transfer, release and retreat."
+}

@@ -1,0 +1,16 @@
+{
+  "base_frame": "openarm_body_link0",
+  "source_image_sha256": "从对应 snapshot 的 manifest.json 复制 camera1.sha256",
+  "fit_points": [
+    {"pixel_uv": null, "base_xyz_m": null},
+    {"pixel_uv": null, "base_xyz_m": null},
+    {"pixel_uv": null, "base_xyz_m": null},
+    {"pixel_uv": null, "base_xyz_m": null},
+    {"pixel_uv": null, "base_xyz_m": null},
+    {"pixel_uv": null, "base_xyz_m": null}
+  ],
+  "check_points": [
+    {"pixel_uv": null, "base_xyz_m": null},
+    {"pixel_uv": null, "base_xyz_m": null}
+  ]
+}
